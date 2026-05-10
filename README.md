@@ -1,0 +1,248 @@
+# Ridemate Mobility - Real-Time Transit Demand Forecasting for Smarter Cities
+
+Streaming CitiBike, MTA subway, and NYC events data through a Kafka to PySpark to ML pipeline to predict transit demand hotspots in real time. Built on GCP with Spark MLlib, Folium geospatial mapping, Spark SQL, and GraphFrames.
+
+---
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Business Problem](#business-problem)
+- [Solution Architecture](#solution-architecture)
+- [Pipeline Breakdown](#pipeline-breakdown)
+- [Datasets](#datasets)
+- [Tech Stack](#tech-stack)
+- [Notebooks](#notebooks)
+- [ML Models](#ml-models)
+- [Geospatial Analysis](#geospatial-analysis)
+- [Business Impact](#business-impact)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+
+---
+
+## Project Overview
+
+Client: Ridemate Mobility, a smart-city startup based in New York City focused on improving urban commuting using data and AI.
+
+Ridemate partners with NYC DOT, CitiBike operators, and transit agencies to help city planners make smarter, faster decisions. This project delivers a real-time, end-to-end data pipeline that ingests live transit feeds, processes them at scale with PySpark, and forecasts demand at CitiBike stations and MTA subway turnstiles across the city.
+
+---
+
+## Business Problem
+
+CitiBike stations and subway platforms across NYC suffer from unpredictable demand surges. Some stations run out of bikes entirely during morning rush hour, other docks sit full for hours blocking return trips, and subway turnstile traffic spikes unpredictably around events, weather changes, and time-of-day patterns. Nearby construction and local events compound these imbalances in ways operators cannot anticipate.
+
+The core challenge: How can we accurately forecast city transit demand and respond proactively in real time?
+
+---
+
+## Solution Architecture
+
+```
+DATA SOURCES
+CitiBike CSVs | MTA Turnstile | Safety Events | NYC Construction
+
+KAFKA PRODUCERS (GCP VM)
+citibike.py | subway.py | events.py
+Stream records in real-time from CSV sources
+
+KAFKA CONSUMERS (GCP VM)
+Write streamed messages to .jsonl files
+citibike_consumer_to_file.py
+subway_consumer_to_file.py
+events_consumer_to_file.py
+
+PYSPARK ETL AND ANALYSIS (Google Colab)
+Load -> Clean -> Feature Engineer -> EDA -> Model
+
+ML FORECASTING AND GEOSPATIAL MAPPING
+Linear Regression | Random Forest | GBT Regressor
+Folium heatmaps of high-demand station clusters
+```
+
+---
+
+## Pipeline Breakdown
+
+### 1. Kafka Producers (GCP VM)
+
+Three producers stream records from CSV datasets in real-time:
+
+- citibike.py streams CitiBike trip records
+- subway.py streams MTA turnstile entries and exits
+- events.py streams NYC safety and event data
+
+### 2. Kafka Consumers (GCP VM)
+
+Each consumer writes streamed Kafka messages to local .jsonl files:
+
+- citibike_consumer_to_file.py
+- subway_consumer_to_file.py
+- events_consumer_to_file.py
+
+Note on Architecture Decision: Direct Colab to Kafka streaming was attempted but faced JVM stream timeout and connectivity issues within the Colab environment. The adopted approach, where the consumer writes to .jsonl files and uploads to Colab, is more reliable and still preserves real-time ingestion integrity on the GCP side.
+
+### 3. PySpark ETL in Google Colab
+
+- Load .jsonl files into PySpark DataFrames
+- Schema inference and validation
+- Data cleaning, null handling, type casting
+- Feature engineering: hour-of-day, day-of-week, lag features, rolling averages
+- Joins across CitiBike, subway, events, and construction datasets
+
+### 4. ML Modeling
+
+Demand forecasting trained on engineered features and evaluated with RMSE and R squared:
+
+- Linear Regression (baseline)
+- Random Forest Regressor
+- Gradient Boosted Trees (GBT) Regressor
+
+### 5. Geospatial Visualization
+
+Folium-powered interactive heatmaps showing high-demand CitiBike stations, station clusters near active events, and proximity-based demand correlation.
+
+---
+
+## Datasets
+
+| Dataset | File | Description |
+|---|---|---|
+| CitiBike Trip Data | nyccitibike.csv | Station-level bike trip records including start/end station, duration, user type |
+| CitiBike Stream | citibike_stream.jsonl | Real-time streamed trip records via Kafka (203 MB) |
+| MTA Subway Turnstile | MTA_Subway_Turnstile_Usage_Data_2022.csv | Turnstile entry/exit counts by station and time |
+| NYC Local Events | nyclocalevents.csv | Local event data used for demand correlation |
+| NYC Safety Events | Safety_Events.csv | Safety incidents affecting transit patterns |
+
+Note: citibike_stream.jsonl is 203 MB and exceeds GitHub's file size limit. It is available via Google Drive at: [insert link]
+
+---
+
+## Tech Stack
+
+Apache Kafka | PySpark | Spark MLlib | Spark SQL | Apache Hive | GraphFrames | Google Cloud Platform | Google Colab | Pandas | Folium | Matplotlib | Seaborn | Python
+
+---
+
+## Notebooks
+
+### Main Project Notebook
+
+| File | Description |
+|---|---|
+| Pyspark_Final_Group_Project_KafkaSpark.ipynb | Core project notebook covering the full pipeline from data loading through ETL, EDA, ML modeling, and geospatial mapping |
+
+### Supporting Notebooks
+
+| File | Description |
+|---|---|
+| Spark_RDD.ipynb | RDD operations, transformations, and actions |
+| Spark_SQL.ipynb | Spark SQL queries and DataFrame API |
+| Spark_SQL_Hive_JSON.ipynb | HiveContext, Hive tables, and JSON data querying |
+| Spark_GraphFrames.ipynb | Graph analytics using GraphFrames |
+| SparkStreaming.ipynb | Structured Streaming with CSV data |
+| SparkStreaming_json.ipynb | Structured Streaming with JSON data |
+
+---
+
+## ML Models
+
+Features used for training:
+
+- start_station_id, start_hour, day_of_week
+- Lag-1 demand and 3-period rolling average
+- Event proximity flag and construction nearby flag
+- Subway entry count at nearest station
+
+| Model | Notes |
+|---|---|
+| Linear Regression | Baseline, fast and interpretable |
+| Random Forest | Better captures non-linear demand patterns |
+| GBT Regressor | Best overall performance on holdout set |
+
+---
+
+## Geospatial Analysis
+
+Interactive maps were generated using Folium to visualize CitiBike stations colored by hourly demand volume, high-demand clusters near event venues, and station-event proximity within a configurable radius using geopy.
+
+---
+
+## Business Impact
+
+| Area | Outcome |
+|---|---|
+| Dock Shortage Prevention | Forecasts allow operators to rebalance bikes proactively, not reactively |
+| Commuter Experience | Riders reliably find bikes at high-demand stations during peak hours |
+| Resource Allocation | City planners can prioritize rebalancing trucks and staff |
+| Event-Driven Preparedness | Demand spikes around events are anticipated, not discovered after the fact |
+| Scalability | Kafka and PySpark architecture scales horizontally as the city's data grows |
+
+---
+
+## Repository Structure
+
+```
+Ridemate-Mobility/
+|
+|-- notebooks/
+|   |-- Pyspark_Final_Group_Project_KafkaSpark.ipynb
+|   |-- Spark_RDD.ipynb
+|   |-- Spark_SQL.ipynb
+|   |-- Spark_SQL_Hive_JSON.ipynb
+|   |-- Spark_GraphFrames.ipynb
+|   |-- SparkStreaming.ipynb
+|   |-- SparkStreaming_json.ipynb
+|
+|-- datasets/
+|   |-- nyccitibike.csv
+|   |-- nyclocalevents.csv
+|
+|-- docs/
+|   |-- FINAL_PROJECT_REPORT-Kafka-Spark.docx
+|   |-- Project_Proposal_Ridemate_Mobility.docx
+|
+|-- README.md
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Java 8 or 11 (required for Spark)
+
+### Installation
+
+```bash
+git clone https://github.com/YOUR_USERNAME/Ridemate-Mobility.git
+cd Ridemate-Mobility
+pip install pyspark pandas matplotlib seaborn folium geopy
+```
+
+### Running the Main Notebook
+
+Open notebooks/Pyspark_Final_Group_Project_KafkaSpark.ipynb in Google Colab and upload the required .jsonl files when prompted, or mount your Google Drive.
+
+### Kafka Setup (GCP VM)
+
+To replicate the real-time streaming pipeline, provision a GCP VM with Kafka installed, then run the producer scripts:
+
+```bash
+python citibike.py
+python subway.py
+python events.py
+```
+
+Then run the consumers to write .jsonl output:
+
+```bash
+python citibike_consumer_to_file.py
+python subway_consumer_to_file.py
+python events_consumer_to_file.py
+```
+
+Download the .jsonl files and upload them to Google Colab to continue with the ETL and modeling pipeline.
